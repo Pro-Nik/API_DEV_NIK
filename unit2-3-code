@@ -1,0 +1,332 @@
+from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
+from pydantic import BaseModel, field_validator
+from enum import Enum
+
+
+app = FastAPI()
+
+
+# =====================================================
+# 1. ENUM
+# =====================================================
+
+class Course(str, Enum):
+
+    AI = "AI"
+    DATA_SCIENCE = "DataScience"
+    COMPUTER_SCIENCE = "ComputerScience"
+    DS = "DS"
+
+
+# =====================================================
+# 2. NESTED MODEL
+# =====================================================
+
+class Address(BaseModel):
+
+    city: str
+
+    state: str
+
+    pincode: str
+
+
+# =====================================================
+# 3. STUDENT INPUT MODEL
+# =====================================================
+
+class StudentCreate(BaseModel):
+
+    name: str
+
+    age: int
+
+    email: str
+
+    course: Course
+
+    address: Address
+
+
+    # Custom Validation
+
+    @field_validator("age")
+    @classmethod
+    def check_age(cls, value):
+
+        if value < 18 or value > 60:
+
+            raise ValueError(
+                "Age must be between 18 and 60"
+            )
+
+        return value
+
+
+# =====================================================
+# 4. RESPONSE MODEL
+# =====================================================
+
+class StudentResponse(BaseModel):
+
+    id: int
+
+    name: str
+
+    age: int
+
+    email: str
+
+    course: Course
+
+    address: Address
+
+
+# =====================================================
+# 5. TEMPORARY DATA STORAGE
+# =====================================================
+
+students = []
+
+next_id = 1
+
+
+# =====================================================
+# 6. DEPENDENCY
+# =====================================================
+
+def get_current_user():
+
+    return "Admin"
+
+
+# =====================================================
+# 7. CREATE STUDENT
+# =====================================================
+
+@app.post(
+    "/students",
+    response_model=StudentResponse
+)
+def create_student(
+
+    student: StudentCreate
+
+):
+
+    global next_id
+
+    new_student = {
+
+        "id": next_id,
+
+        "name": student.name,
+
+        "age": student.age,
+
+        "email": student.email,
+
+        "course": student.course,
+
+        "address": student.address
+
+    }
+
+    students.append(new_student)
+
+    next_id += 1
+
+    return new_student
+
+
+# =====================================================
+# 8. GET ALL STUDENTS
+# =====================================================
+
+@app.get("/students")
+def get_students():
+
+    return students
+
+
+# =====================================================
+# 9. GET STUDENT BY ID
+# =====================================================
+
+@app.get("/students/{student_id}")
+def get_student(student_id: int):
+
+    for student in students:
+
+        if student["id"] == student_id:
+
+            return student
+
+
+    raise HTTPException(
+
+        status_code=404,
+
+        detail="Student not found"
+
+    )
+
+
+# =====================================================
+# 10. UPDATE STUDENT
+# =====================================================
+
+@app.put("/students/{student_id}")
+def update_student(
+
+    student_id: int,
+
+    student_data: StudentCreate
+
+):
+
+    for student in students:
+
+        if student["id"] == student_id:
+
+            student["name"] = student_data.name
+
+            student["age"] = student_data.age
+
+            student["email"] = student_data.email
+
+            student["course"] = student_data.course
+
+            student["address"] = student_data.address
+
+            return student
+
+
+    raise HTTPException(
+
+        status_code=404,
+
+        detail="Student not found"
+
+    )
+
+
+# =====================================================
+# 11. DELETE STUDENT
+# =====================================================
+
+@app.delete("/students/{student_id}")
+def delete_student(student_id: int):
+
+    for student in students:
+
+        if student["id"] == student_id:
+
+            students.remove(student)
+
+            return {
+                "message": "Student deleted successfully"
+            }
+
+
+    raise HTTPException(
+
+        status_code=404,
+
+        detail="Student not found"
+
+    )
+
+
+# =====================================================
+# 12. ASYNC ENDPOINT
+# =====================================================
+
+@app.get("/async-demo")
+async def async_demo():
+
+    return {
+
+        "message":
+        "This is an asynchronous FastAPI endpoint"
+
+    }
+
+
+# =====================================================
+# 13. BACKGROUND TASK
+# =====================================================
+
+def write_notification(student_id):
+
+    with open(
+        "notifications.txt",
+        "a"
+    ) as file:
+
+        file.write(
+
+            f"Notification sent to student "
+            f"{student_id}\n"
+
+        )
+
+
+@app.post("/students/{student_id}/notify")
+def notify_student(
+
+    student_id: int,
+
+    background_tasks: BackgroundTasks
+
+):
+
+    # Check whether student exists
+
+    for student in students:
+
+        if student["id"] == student_id:
+
+            background_tasks.add_task(
+
+                write_notification,
+
+                student_id
+
+            )
+
+            return {
+
+                "message":
+                "Notification task added"
+
+            }
+
+
+    raise HTTPException(
+
+        status_code=404,
+
+        detail="Student not found"
+
+    )
+
+
+# =====================================================
+# 14. DEPENDENCY INJECTION
+# =====================================================
+
+@app.get("/profile")
+def profile(
+
+    user = Depends(get_current_user)
+
+):
+
+    return {
+
+        "message": "Dependency Injection Example",
+
+        "current_user": user
+
+    }
